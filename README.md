@@ -53,6 +53,9 @@ Example:
 tssh {ladmin@192.168.100.101,ladmin@192.168.100.102,ladmin@192.168.100.103}
 ```
 
+![Example Usage](images/tssh_example.png)
+
+
 ### Accepted host formats
 
 All of these do the same thing:

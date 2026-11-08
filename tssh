@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# tssh - ClusterSSH-style wrapper around tmux synchronized panes
+#
+# Usage:
+#   tssh {ladmin@192.168.100.101,ladmin@192.168.100.102,ladmin@192.168.100.103}
+#   tssh ladmin@192.168.100.101 ladmin@192.168.100.102
+#   tssh "ladmin@host1,ladmin@host2"
+#   tssh ladmin@192.168.100.{101..103}
+#
+# Note: bash expands unquoted {a,b,c} into separate arguments itself,
+# so all of the forms above end up handled the same way.
+
+set -euo pipefail
+
+# --- Check for tmux ---------------------------------------------------------
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "Error: tmux is not installed." >&2
+    echo "Install it with:  sudo dnf install tmux" >&2
+    exit 1
+fi
+
+# --- Usage ------------------------------------------------------------------
+if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "Usage: tssh {user@host1,user@host2,user@host3}" >&2
+    echo "       tssh user@host1 user@host2 ..." >&2
+    exit 1
+fi
+
+# --- Parse hosts ------------------------------------------------------------
+# Join all args, strip braces, split on commas and whitespace.
+raw="$*"
+raw="${raw//[\{\}]/}"
+raw="${raw//,/ }"
+
+hosts=()
+for h in $raw; do
+    hosts+=("$h")
+done
+
+if [ "${#hosts[@]}" -eq 0 ]; then
+    echo "Error: no hosts given." >&2
+    exit 1
+fi
+
+# --- Build tmux session -----------------------------------------------------
+session="tssh-$$"
+
+tmux new-session -d -s "$session" -n tssh "ssh ${hosts[0]}"
+
+for host in "${hosts[@]:1}"; do
+    tmux split-window -t "$session" "ssh $host"
+    tmux select-layout -t "$session" tiled >/dev/null
+done
+
+tmux select-layout -t "$session" tiled >/dev/null
+tmux set-window-option -t "$session" synchronize-panes on
+tmux set-option -t "$session" status-right " SYNC ON | Ctrl-b :setw synchronize-panes to toggle "
+
+# --- Attach (or switch if already inside tmux) ------------------------------
+if [ -n "${TMUX:-}" ]; then
+    tmux switch-client -t "$session"
+else
+    tmux attach-session -t "$session"
+fi
